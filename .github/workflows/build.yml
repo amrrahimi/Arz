@@ -1,0 +1,81 @@
+name: Build desktop installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install requirements
+        run: pip install -r requirements-dev.txt
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+  windows:
+    name: Windows .exe
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Package native GUI
+        shell: pwsh
+        run: |
+          pyinstaller --clean --noconfirm --onefile --windowed --name ArzAgent --collect-all ccxt --collect-all keyring main.py
+          if (-not (Test-Path dist/ArzAgent.exe)) { throw "exe not built" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArzAgent-Windows-x64-exe
+          path: dist/ArzAgent.exe
+
+  mac:
+    name: macOS .dmg (${{ matrix.arch }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: AppleSilicon
+          - os: macos-15-intel
+            arch: Intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Package .app and .dmg
+        shell: bash
+        run: |
+          pyinstaller --clean --noconfirm --onedir --windowed --name ArzAgent --collect-all ccxt --collect-all keyring main.py
+          test -d dist/ArzAgent.app
+          mkdir -p dist/dmg
+          cp -R dist/ArzAgent.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname 'ArzAgent' -srcfolder dist/dmg -ov -format UDZO "dist/ArzAgent-${{ matrix.arch }}.dmg"
+          test -f "dist/ArzAgent-${{ matrix.arch }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArzAgent-macOS-${{ matrix.arch }}-dmg
+          path: dist/ArzAgent-${{ matrix.arch }}.dmg

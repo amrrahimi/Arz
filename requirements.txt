@@ -1,0 +1,5 @@
+PySide6>=6.8,<7
+ccxt>=4.4,<5
+numpy>=1.26,<3
+keyring>=25,<27
+platformdirs>=4,<6

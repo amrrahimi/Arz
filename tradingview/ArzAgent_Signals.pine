@@ -1,0 +1,36 @@
+//@version=6
+// This educational Pine strategy mirrors approximate technical indicators.
+// TradingView is NOT linked to the desktop bot. No orders are transmitted to exchanges.
+strategy("ArzAgent Signals — Research Only", overlay=true,
+    initial_capital=10000, commission_type=strategy.commission.percent,
+    commission_value=0.15, process_orders_on_close=true)
+mode = input.string("Swing", "Profile", options=["Long", "Swing", "Scalp"])
+fast = mode == "Long" ? 50 : mode == "Swing" ? 20 : 9
+slow = mode == "Long" ? 200 : mode == "Swing" ? 50 : 21
+stopATR = mode == "Long" ? 3.2 : mode == "Swing" ? 2.4 : 1.7
+takeATR = mode == "Long" ? 6.4 : mode == "Swing" ? 4.4 : 2.9
+emaFast = ta.ema(close, fast)
+emaSlow = ta.ema(close, slow)
+[macdLine, macdSignal, macdHist] = ta.macd(close, 12, 26, 9)
+currentRSI = ta.rsi(close, 14)
+[plusDI, minusDI, currentADX] = ta.dmi(14, 14)
+currentATR = ta.atr(14)
+volumeAvg = ta.sma(volume, 20)
+volumeOK = mode != "Scalp" or (volumeAvg > 0 and volume / volumeAvg > 1.05)
+trendOK = emaFast > emaSlow
+priceOK = close > emaFast
+rsiOK = mode == "Long" ? currentRSI > 49 and currentRSI < 75 : mode == "Swing" ? currentRSI > 44 and currentRSI < 70 : currentRSI > 48 and currentRSI < 72
+adxOK = currentADX > (mode == "Scalp" ? 20 : mode == "Long" ? 18 : 17)
+enter = barstate.isconfirmed and trendOK and priceOK and macdHist > 0 and rsiOK and adxOK and volumeOK
+exitSignal = mode == "Scalp" ? close < emaSlow or currentRSI < 42 : (close < emaFast and macdHist < 0) or currentRSI < 38
+if enter and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    alert('{"source":"ArzAgent Research","side":"buy","symbol":"' + syminfo.ticker + '"}', alert.freq_once_per_bar_close)
+if strategy.position_size > 0
+    strategy.exit("ATR Exit", "Long", stop=strategy.position_avg_price-stopATR*currentATR,
+        limit=strategy.position_avg_price+takeATR*currentATR)
+    if exitSignal
+        strategy.close("Long", comment="Technical exit")
+        alert('{"source":"ArzAgent Research","side":"sell","symbol":"' + syminfo.ticker + '"}', alert.freq_once_per_bar_close)
+plot(emaFast, color=color.aqua, title="Fast EMA")
+plot(emaSlow, color=color.orange, title="Slow EMA")
