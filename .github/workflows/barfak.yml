@@ -1,0 +1,55 @@
+name: Build Barfak (macOS)
+
+on:
+  push:
+    branches: [barfak]
+    paths: ["Barfak/**", ".github/workflows/barfak.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: Barfak
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build universal binary
+        run: |
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
+          mkdir -p build
+          lipo -create -output build/Barfak-universal \
+            .build/arm64-apple-macosx/release/Barfak \
+            .build/x86_64-apple-macosx/release/Barfak
+          lipo -info build/Barfak-universal
+
+      - name: Package app and DMG
+        run: |
+          BARFAK_BINARY=build/Barfak-universal ./Scripts/build-app.sh
+          mkdir -p build/dmg
+          cp -R build/Barfak.app build/dmg/
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname Barfak -srcfolder build/dmg -ov -format UDZO build/Barfak.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Barfak-macOS
+          path: Barfak/build/Barfak.dmg
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=barfak-latest
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" build/Barfak.dmg --clobber
+          else
+            gh release create "$TAG" build/Barfak.dmg --target "$GITHUB_SHA" \
+              --prerelease --title "Barfak (macOS)" \
+              --notes "Barfak.dmg را دانلود کنید و برنامه را به Applications بکشید."
+          fi
