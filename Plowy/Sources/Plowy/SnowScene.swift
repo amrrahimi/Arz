@@ -30,6 +30,9 @@ final class SnowScene: SKScene {
     private var plowCooldown: TimeInterval = 0
     private var plowLoad: CGFloat = 0
     private let plowHeap = SKShapeNode()
+    private let plowCleats = SKShapeNode()
+    private var plowWheels: [SKSpriteNode] = []
+    private var plowTravel: CGFloat = 0
     private var groundFill: CGFloat = 0
 
     // Snowballs
@@ -360,31 +363,47 @@ final class SnowScene: SKScene {
         plowHeap.fillColor = NSColor(srgbRed: 0.99, green: 0.995, blue: 1, alpha: 1)
         plowHeap.strokeColor = NSColor(srgbRed: 0.74, green: 0.81, blue: 0.90, alpha: 0.9)
         plowHeap.lineWidth = 0.8
-        plowHeap.zPosition = 1
+        plowHeap.zPosition = -1             // behind the bucket's edge
         plowHeap.path = nil
         plowHeap.removeFromParent()
         node.addChild(plowHeap)
+        plowCleats.fillColor = NSColor(srgbRed: 0.06, green: 0.06, blue: 0.07, alpha: 1)
+        plowCleats.strokeColor = .clear
+        plowCleats.zPosition = 0.5
+        plowCleats.removeFromParent()
+        node.addChild(plowCleats)
+        plowWheels = Art.loaderWheels.map { (x, y, r) in
+            let w = SKSpriteNode(texture: r > 5 ? art.wheel : art.idler)
+            w.size = CGSize(width: r * 2 + 2, height: r * 2 + 2)
+            w.position = CGPoint(x: x - Art.loaderSize.width / 2, y: y)
+            w.zPosition = 0.6
+            node.addChild(w)
+            return w
+        }
         plowLoad = 0
+        plowTravel = 0
+        updateLoaderParts()
         addChild(node)
         plow = node
     }
 
-    /// Bucket heap in loader-local points (anchor at the bottom centre).
-    private func heapPath(load: CGFloat) -> CGPath? {
-        guard load > 0.02 else { return nil }
-        let l = min(1, load)
-        let w = 18 + 18 * l, h = 6 + 22 * l
-        let x0: CGFloat = 63, base: CGFloat = 18      // over the bucket mouth
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: x0 - w * 0.5, y: base))
-        path.addCurve(to: CGPoint(x: x0 + 2, y: base + h),
-                      control1: CGPoint(x: x0 - w * 0.55, y: base + h * 0.7),
-                      control2: CGPoint(x: x0 - w * 0.3, y: base + h * 1.05))
-        path.addCurve(to: CGPoint(x: x0 + w * 0.62, y: base + 2),
-                      control1: CGPoint(x: x0 + w * 0.35, y: base + h * 0.95),
-                      control2: CGPoint(x: x0 + w * 0.66, y: base + h * 0.55))
-        path.closeSubpath()
-        return path
+    /// Loader sprite points (origin bottom-left) to node-local points (anchor bottom centre).
+    private var loaderShift: CGAffineTransform {
+        CGAffineTransform(translationX: -Art.loaderSize.width / 2, y: 0)
+    }
+
+    private func updateLoaderParts() {
+        var shift = loaderShift
+        plowHeap.path = Art.plowHeap(load: plowLoad).flatMap { $0.copy(using: &shift) }
+        let cleats = CGMutablePath()
+        for (x, y, a) in Art.trackCleats(offset: plowTravel) {
+            let t = CGAffineTransform(translationX: x - Art.loaderSize.width / 2, y: y).rotated(by: a)
+            cleats.addRect(CGRect(x: -2, y: -1.2, width: 4, height: 2.4), transform: t)
+        }
+        plowCleats.path = cleats
+        for (node, wheel) in zip(plowWheels, Art.loaderWheels) {
+            node.zRotation = -plowTravel / wheel.2   // clockwise as the loader drives forward
+        }
     }
 
     /// Balls that are part of a stacked snowman survive the plow.
@@ -399,6 +418,7 @@ final class SnowScene: SKScene {
         }
         let before = plowX + plowDirection * 80
         plowX += plowDirection * 105 * dt
+        plowTravel += 105 * dt
         let after = plowX + plowDirection * 80
         node.position = CGPoint(x: plowX, y: abs(sin(time * 17)) * 0.9)
         let lo = min(before, after), hi = max(before, after)
@@ -428,7 +448,7 @@ final class SnowScene: SKScene {
             b.node.removeFromParent()
             balls.removeAll { $0 === b }
         }
-        plowHeap.path = heapPath(load: plowLoad)
+        updateLoaderParts()
         if plowX < -130 || plowX > size.width + 130 {
             node.removeFromParent()
             plow = nil

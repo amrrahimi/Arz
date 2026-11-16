@@ -49,7 +49,7 @@ scene.MouseUp(new SKPoint(900, 400));
 settings.LightStyle = 3;
 settings.Changed();
 scene.PlowNow();
-Run(9.5, new SKPoint(-500, -500));
+Run(5.5, new SKPoint(-500, -500));
 Save("win-interact.png");
 
 void Save(string name)

@@ -140,6 +140,7 @@ public sealed class Art
     public static readonly SKSize StationSize = new(46, 40);
     public static readonly SKSize SnowmanSize = new(130, 166);
 
+    public readonly SKImage Wheel, Idler;
     public readonly SKImage Flake, Glow, Loader, Gondola, Station, Ball, Face, Buttons, Hat, Arms, Snowman;
     /// [style][color]
     public readonly SKImage[][] Bulbs;
@@ -150,6 +151,8 @@ public sealed class Art
         Glow = SoftDot(0f);
         Bulbs = BulbColors.Select((colors, style) => colors.Select(c => Bulb(style, c)).ToArray()).ToArray();
         Loader = LoaderImage();
+        Wheel = WheelImage(9.5f);
+        Idler = WheelImage(4.2f);
         Gondola = GondolaImage();
         Station = StationImage();
         Ball = BallImage();
@@ -364,6 +367,77 @@ public sealed class Art
 
     // MARK: Snow loader
 
+    /// Road wheels (centre x, centre y, radius) in loader sprite points, y up.
+    public static readonly (float X, float Y, float R)[] LoaderWheels =
+        { (56, 19, 9.5f), (87, 19, 9.5f), (118, 19, 9.5f), (71.5f, 12.5f, 4.2f), (102.5f, 12.5f, 4.2f) };
+
+    /// Tread cleats around the track, `offset` points along it (clockwise, so a
+    /// growing offset moves the lower run backwards as the loader drives forward).
+    /// Returns (x, y, angle) in loader sprite points, y up.
+    public static List<(float X, float Y, float A)> TrackCleats(float offset)
+    {
+        const float r = 16.8f, left = 55, right = 119, cy = 19;
+        float straight = right - left, arc = MathF.PI * r, total = 2 * straight + 2 * arc;
+        float spacing = total / 29;
+        float d = offset % spacing;
+        if (d < 0) d += spacing;
+        var output = new List<(float, float, float)>();
+        for (; d < total; d += spacing)
+        {
+            float s = d;
+            if (s < straight) output.Add((left + s, cy + r, 0));
+            else if ((s -= straight) < arc)
+            {
+                float t = MathF.PI / 2 - s / r;
+                output.Add((right + r * MathF.Cos(t), cy + r * MathF.Sin(t), t - MathF.PI / 2));
+            }
+            else if ((s -= arc) < straight) output.Add((right - s, cy - r, MathF.PI));
+            else
+            {
+                s -= straight;
+                float t = -MathF.PI / 2 - s / r;
+                output.Add((left + r * MathF.Cos(t), cy + r * MathF.Sin(t), t - MathF.PI / 2));
+            }
+        }
+        return output;
+    }
+
+    /// The snow pushed along in front of the bucket, in loader sprite points, y up.
+    public static SKPath? PlowHeap(float load)
+    {
+        if (load <= 0.02f) return null;
+        float l = Math.Min(1, load), w = 14 + 30 * l, h = 5 + 24 * l, x0 = 166;
+        var p = new SKPath();
+        p.MoveTo(x0 - 8, 0);
+        p.CubicTo(x0 - 6, h * 0.8f, x0 + w * 0.02f, h, x0 + w * 0.3f, h);
+        p.CubicTo(x0 + w * 0.62f, h, x0 + w * 0.97f, h * 0.4f, x0 + w, 0);
+        p.Close();
+        return p;
+    }
+
+    static SKImage WheelImage(float r)
+    {
+        float side = r * 2 + 2;
+        return Draw.Render(side, side, 4, c =>
+        {
+            float m = side / 2;
+            using (var rim = Draw.Oval(m, m, r, r))
+            {
+                Draw.Fill(c, rim, Draw.Rgb(124, 126, 132), Draw.Rgb(70, 72, 78));
+                Draw.Stroke(c, rim, Draw.Rgb(30, 30, 34), 0.8f);
+            }
+            using (var hub = Draw.Oval(m, m, r * 0.38f, r * 0.38f))
+                Draw.Fill(c, hub, Draw.Rgb(200, 202, 208), Draw.Rgb(130, 132, 138));
+            // Bolts make the rotation visible.
+            for (int i = 0; i < 5; i++)
+            {
+                float a = i * 2 * MathF.PI / 5;
+                using var bolt = Draw.Oval(m + MathF.Cos(a) * r * 0.66f, m + MathF.Sin(a) * r * 0.66f, r * 0.12f, r * 0.12f);
+                Draw.Fill(c, bolt, Draw.Rgb(40, 40, 44));
+            }
+        });
+    }
+
     static SKImage LoaderImage() => Draw.Render(LoaderSize.Width, LoaderSize.Height, 3, c =>
     {
         var yellowTop = Draw.Rgb(252, 196, 30);
@@ -385,25 +459,8 @@ public sealed class Art
 
         // Rubber track
         using (var p = Draw.RRect(38, 2, 98, 34, 17)) Draw.Fill(c, p, Draw.Rgb(52, 52, 56), Draw.Rgb(20, 20, 22));
-        for (float x = 50; x < 124; x += 8)
-        {
-            using var a = Draw.Rect(x, 34.6f, 4, 2.4f); Draw.Fill(c, a, Draw.Rgb(16, 16, 18));
-            using var b = Draw.Rect(x, 1, 4, 2.4f); Draw.Fill(c, b, Draw.Rgb(16, 16, 18));
-        }
         using (var p = Draw.RRect(44, 8, 86, 22, 11)) Draw.Fill(c, p, Draw.Rgb(44, 44, 48), Draw.Rgb(70, 70, 76));
-        foreach (var cx in new[] { 56f, 87f, 118f })
-        {
-            using var w = Draw.Oval(cx, 19, 9.5f, 9.5f);
-            Draw.Fill(c, w, Draw.Rgb(124, 126, 132), Draw.Rgb(70, 72, 78));
-            Draw.Stroke(c, w, Draw.Rgb(30, 30, 34), 0.8f);
-            using var hub = Draw.Oval(cx, 19, 3.6f, 3.6f);
-            Draw.Fill(c, hub, Draw.Rgb(200, 202, 208), Draw.Rgb(130, 132, 138));
-        }
-        foreach (var cx in new[] { 71.5f, 102.5f })
-        {
-            using var w = Draw.Oval(cx, 12.5f, 4.2f, 4.2f);
-            Draw.Fill(c, w, Draw.Rgb(110, 112, 118), Draw.Rgb(64, 66, 72));
-        }
+        // Treads and wheels are separate sprites so they can move.
 
         // Chassis and engine cover
         using (var p = Draw.Poly((40, 34), (132, 34), (137, 43), (133, 51), (40, 51)))

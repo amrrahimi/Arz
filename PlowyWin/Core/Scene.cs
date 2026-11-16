@@ -37,6 +37,7 @@ public sealed class Scene
     private double plowCooldown;
     private float groundFill;
     private float plowLoad;
+    private float plowTravel;
 
     // Snowballs, cable cars, snowman
     private readonly List<Snowball> balls = new();
@@ -255,20 +256,6 @@ public sealed class Scene
     private bool InSnowman(Snowball b) =>
         b.Role != Snowball.BallRole.Plain || balls.Any(o => o.Support == b && o.Role == Snowball.BallRole.Torso);
 
-    /// The snow the loader scoops up, heaped in its bucket (loader-local, y down).
-    private SKPath? HeapPath()
-    {
-        if (plowLoad <= 0.02f) return null;
-        float l = Math.Min(1, plowLoad);
-        float w = 18 + 18 * l, h = 6 + 22 * l, x0 = 63, b = -18;
-        var p = new SKPath();
-        p.MoveTo(x0 - w * 0.5f, b);
-        p.CubicTo(x0 - w * 0.55f, b - h * 0.7f, x0 - w * 0.3f, b - h * 1.05f, x0 + 2, b - h);
-        p.CubicTo(x0 + w * 0.35f, b - h * 0.95f, x0 + w * 0.66f, b - h * 0.55f, x0 + w * 0.62f, b - 2);
-        p.Close();
-        return p;
-    }
-
     private void UpdatePlow(float dt, double now)
     {
         if (!plowing)
@@ -278,6 +265,7 @@ public sealed class Scene
         }
         float before = plowX + plowDirection * 80;
         plowX += plowDirection * 105 * dt;
+        plowTravel += 105 * dt;
         float after = plowX + plowDirection * 80;
         float lo = Math.Min(before, after), hi = Math.Max(before, after);
         if (ground is { } g && hi >= 0 && lo <= width)
@@ -725,15 +713,43 @@ public sealed class Scene
             c.Save();
             c.Translate(plowX, groundY - bob);
             c.Scale(plowDirection, 1);
-            c.DrawImage(art.Loader, SKRect.Create(-size.Width / 2, -size.Height, size.Width, size.Height), imagePaint);
-            using (var heap = HeapPath())
+            // Loader sprite points (y up, origin bottom-left) to local canvas coordinates.
+            float half = size.Width / 2;
+            using (var heap = Art.PlowHeap(plowLoad))
             {
                 if (heap != null)
                 {
+                    // Pushed along the ground in front of the bucket, behind its edge.
+                    c.Save();
+                    c.Translate(-half, 0);
+                    c.Scale(1, -1);
                     using var fill = new SKPaint { Color = new SKColor(252, 254, 255), IsAntialias = true };
                     c.DrawPath(heap, fill);
                     c.DrawPath(heap, snowEdge);
+                    c.Restore();
                 }
+            }
+            c.DrawImage(art.Loader, SKRect.Create(-half, -size.Height, size.Width, size.Height), imagePaint);
+
+            using (var cleat = new SKPaint { Color = new SKColor(16, 16, 18), IsAntialias = true })
+            {
+                foreach (var (x, y, a) in Art.TrackCleats(plowTravel))
+                {
+                    c.Save();
+                    c.Translate(x - half, -y);
+                    c.RotateRadians(-a);
+                    c.DrawRect(-2, -1.2f, 4, 2.4f, cleat);
+                    c.Restore();
+                }
+            }
+            foreach (var (x, y, r) in Art.LoaderWheels)
+            {
+                c.Save();
+                c.Translate(x - half, -y);
+                c.RotateRadians(plowTravel / r);   // clockwise as the loader drives forward
+                float side = r * 2 + 2;
+                c.DrawImage(r > 5 ? art.Wheel : art.Idler, SKRect.Create(-side / 2, -side / 2, side, side), imagePaint);
+                c.Restore();
             }
             c.Restore();
         }

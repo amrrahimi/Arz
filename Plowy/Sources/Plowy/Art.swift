@@ -92,6 +92,8 @@ final class Art {
     /// `[style][color]`
     let bulbs: [[SKTexture]]
     let loader: SKTexture
+    let wheel: SKTexture
+    let idler: SKTexture
     let gondola: SKTexture
     let station: SKTexture
     let ball: SKTexture
@@ -107,6 +109,8 @@ final class Art {
             colors.map { SKTexture(cgImage: Art.bulb(style: style, color: $0)) }
         }
         loader = SKTexture(cgImage: Art.loaderImage())
+        wheel = SKTexture(cgImage: Art.wheelImage(radius: 9.5))
+        idler = SKTexture(cgImage: Art.wheelImage(radius: 4.2))
         gondola = SKTexture(cgImage: Art.gondolaImage())
         station = SKTexture(cgImage: Art.stationImage())
         ball = SKTexture(cgImage: Art.ballImage())
@@ -281,6 +285,73 @@ final class Art {
 
     // MARK: Snow loader
 
+    /// Road wheels (centre x, centre y, radius) in loader sprite points, y up.
+    static let loaderWheels: [(CGFloat, CGFloat, CGFloat)] =
+        [(56, 19, 9.5), (87, 19, 9.5), (118, 19, 9.5), (71.5, 12.5, 4.2), (102.5, 12.5, 4.2)]
+
+    /// Tread cleats around the track, `offset` points along it (clockwise, so
+    /// a growing offset moves the lower run backwards as the loader drives forward).
+    /// Returns (x, y, angle) in loader sprite points, y up.
+    static func trackCleats(offset: CGFloat) -> [(CGFloat, CGFloat, CGFloat)] {
+        let r: CGFloat = 16.8, left: CGFloat = 55, right: CGFloat = 119, cy: CGFloat = 19
+        let straight = right - left, arc = CGFloat.pi * r
+        let total = 2 * straight + 2 * arc
+        var out: [(CGFloat, CGFloat, CGFloat)] = []
+        let spacing = total / 29
+        var d = offset.truncatingRemainder(dividingBy: spacing)
+        if d < 0 { d += spacing }
+        while d < total {
+            var s = d
+            if s < straight {
+                out.append((left + s, cy + r, 0))
+            } else if (s - straight) < arc {
+                s -= straight
+                let t = CGFloat.pi / 2 - s / r
+                out.append((right + r * cos(t), cy + r * sin(t), t - CGFloat.pi / 2))
+            } else if (s - straight - arc) < straight {
+                s -= straight + arc
+                out.append((right - s, cy - r, CGFloat.pi))
+            } else {
+                s -= 2 * straight + arc
+                let t = -CGFloat.pi / 2 - s / r
+                out.append((left + r * cos(t), cy + r * sin(t), t - CGFloat.pi / 2))
+            }
+            d += spacing
+        }
+        return out
+    }
+
+    /// The snow pushed along in front of the bucket, in loader sprite points, y up.
+    static func plowHeap(load: CGFloat) -> CGPath? {
+        guard load > 0.02 else { return nil }
+        let l = min(1, load)
+        let w = 14 + 30 * l, h = 5 + 24 * l, x0: CGFloat = 166
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: x0 - 8, y: 0))
+        path.addCurve(to: CGPoint(x: x0 + w * 0.3, y: h),
+                      control1: CGPoint(x: x0 - 6, y: h * 0.8), control2: CGPoint(x: x0 + w * 0.02, y: h))
+        path.addCurve(to: CGPoint(x: x0 + w, y: 0),
+                      control1: CGPoint(x: x0 + w * 0.62, y: h), control2: CGPoint(x: x0 + w * 0.97, y: h * 0.4))
+        path.closeSubpath()
+        return path
+    }
+
+    static func wheelImage(radius r: CGFloat) -> CGImage {
+        let side = r * 2 + 2
+        return render(CGSize(width: side, height: side), scale: 4) {
+            let c = side / 2
+            let rim = oval(c, c, r, r)
+            fill(rim, top: rgb(124, 126, 132), bottom: rgb(70, 72, 78))
+            stroke(rim, rgb(30, 30, 34), 0.8)
+            fill(oval(c, c, r * 0.38, r * 0.38), top: rgb(200, 202, 208), bottom: rgb(130, 132, 138))
+            // Bolts make the rotation visible.
+            for i in 0..<5 {
+                let a = CGFloat(i) * 2 * .pi / 5
+                fill(oval(c + cos(a) * r * 0.66, c + sin(a) * r * 0.66, r * 0.12, r * 0.12), rgb(40, 40, 44))
+            }
+        }
+    }
+
     static func loaderImage() -> CGImage {
         render(loaderSize) {
             let yellowTop = rgb(252, 196, 30), yellowBottom = rgb(214, 148, 6)
@@ -302,21 +373,8 @@ final class Art {
 
             // Rubber track
             fill(rrect(38, 2, 98, 34, 17), top: rgb(52, 52, 56), bottom: rgb(20, 20, 22))
-            var x: CGFloat = 50
-            while x < 124 {
-                fill(NSBezierPath(rect: NSRect(x: x, y: 34.6, width: 4, height: 2.4)), rgb(16, 16, 18))
-                fill(NSBezierPath(rect: NSRect(x: x, y: 1, width: 4, height: 2.4)), rgb(16, 16, 18))
-                x += 8
-            }
             fill(rrect(44, 8, 86, 22, 11), top: rgb(44, 44, 48), bottom: rgb(70, 70, 76))
-            for cx in [56.0, 87.0, 118.0] {
-                fill(oval(CGFloat(cx), 19, 9.5, 9.5), top: rgb(124, 126, 132), bottom: rgb(70, 72, 78))
-                stroke(oval(CGFloat(cx), 19, 9.5, 9.5), rgb(30, 30, 34), 0.8)
-                fill(oval(CGFloat(cx), 19, 3.6, 3.6), top: rgb(200, 202, 208), bottom: rgb(130, 132, 138))
-            }
-            for cx in [71.5, 102.5] {
-                fill(oval(CGFloat(cx), 12.5, 4.2, 4.2), top: rgb(110, 112, 118), bottom: rgb(64, 66, 72))
-            }
+            // Treads and wheels are separate sprites so they can move.
 
             // Chassis and engine cover
             let chassis = poly([(40, 34), (132, 34), (137, 43), (133, 51), (40, 51)])
