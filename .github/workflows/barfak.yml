@@ -55,6 +55,15 @@ jobs:
           screencapture -x build/preview/shot2.png || true
           kill %1 || true
 
+      - name: Publish preview images
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view barfak-preview >/dev/null 2>&1 || gh release create barfak-preview \
+            --target "$GITHUB_SHA" --prerelease --title "Barfak build previews" --notes "Automated screenshots."
+          gh release upload barfak-preview build/preview/* --clobber
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
