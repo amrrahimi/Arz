@@ -52,19 +52,22 @@ jobs:
         continue-on-error: true
         run: |
           New-Item -ItemType Directory -Force out/preview | Out-Null
+          Add-Type -Path Installer/CiHelper.cs -ReferencedAssemblies System.Drawing, System.Drawing.Primitives, System.Drawing.Common
           Start-Process notepad
           Start-Sleep 2
           $env:BARFAK_DEMO = "1"
           $p = Start-Process out/publish/Barfak.exe -PassThru
           Start-Sleep 10
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $op = [System.Drawing.CopyPixelOperation]::SourceCopy -bor [System.Drawing.CopyPixelOperation]::CaptureBlt
-          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size, $op)
-          $bmp.Save("$PWD/out/preview/win-shot1.png")
-          Get-Process Barfak -ErrorAction SilentlyContinue | Select-Object Name, CPU, WorkingSet64 | Format-Table | Out-String | Set-Content out/preview/win-log.txt
+          [CiHelper]::Shot("$PWD/out/preview/win-shot1.png")
+          Add-Type -AssemblyName System.Windows.Forms
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen
+          "bounds=$($b.Bounds) work=$($b.WorkingArea)" | Set-Content out/preview/win-log.txt
+          $gy = $b.WorkingArea.Bottom - 4
+          [CiHelper]::Drag(40, $gy, 330, $gy)
+          [CiHelper]::Drag([int]($b.Bounds.Width / 2), $b.WorkingArea.Top + 24, [int]($b.Bounds.Width * 0.8), 200)
+          Start-Sleep 2
+          [CiHelper]::Shot("$PWD/out/preview/win-shot2.png")
+          Get-Process Barfak -ErrorAction SilentlyContinue | Select-Object Name, CPU, WorkingSet64 | Format-Table | Out-String | Add-Content out/preview/win-log.txt
           Stop-Process -Id $p.Id -Force
 
       - name: Publish release files
@@ -72,6 +75,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload barfak-latest out/Barfak-Setup.exe out/Barfak-Windows-Portable.zip --clobber
-          if (Test-Path out/preview/win-shot1.png) {
-            gh release upload barfak-preview out/preview/win-shot1.png out/preview/win-log.txt --clobber
-          }
+          $files = Get-ChildItem out/preview -File | ForEach-Object { $_.FullName }
+          if ($files) { gh release upload barfak-preview @files --clobber }

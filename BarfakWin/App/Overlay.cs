@@ -97,7 +97,7 @@ internal sealed class Overlay : Form
         Native.SetWindowLong(Handle, Native.GWL_EXSTYLE, ex);
     }
 
-    private static SKPoint Cursor()
+    private static SKPoint CursorPos()
     {
         Native.GetCursorPos(out var p);
         return new SKPoint(p.X, p.Y);
@@ -108,12 +108,12 @@ internal sealed class Overlay : Form
         if (e.Button != MouseButtons.Left) return;
         dragging = true;
         Capture = true;
-        Scene.MouseDown(Cursor());
+        Scene.MouseDown(CursorPos());
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (dragging) Scene.MouseDrag(Cursor());
+        if (dragging) Scene.MouseDrag(CursorPos());
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -121,7 +121,7 @@ internal sealed class Overlay : Form
         if (!dragging) return;
         dragging = false;
         Capture = false;
-        Scene.MouseUp(Cursor());
+        Scene.MouseUp(CursorPos());
     }
 
     protected override void Dispose(bool disposing)
