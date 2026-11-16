@@ -50,9 +50,10 @@ jobs:
 
       - name: Demo screenshots
         continue-on-error: true
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Force out/preview | Out-Null
-          Add-Type -Path Installer/CiHelper.cs -ReferencedAssemblies System.Drawing, System.Drawing.Primitives, System.Drawing.Common
+          Add-Type -Path Installer/CiHelper.cs -ReferencedAssemblies System.Drawing
           Start-Process notepad
           Start-Sleep 2
           $env:BARFAK_DEMO = "1"
