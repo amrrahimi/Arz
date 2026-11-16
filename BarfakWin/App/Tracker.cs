@@ -87,8 +87,12 @@ internal sealed class Tracker
         var thread = new Thread(() =>
         {
             var found = new List<SKRect>();
-            try { found = DesktopIcons(); }
-            catch (Exception e) { Debug.WriteLine(e); }
+            string error = "";
+            try { found = DesktopIcons(out error); }
+            catch (Exception e) { error = e.ToString(); }
+            if (BarfakSettings.Demo)
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "barfak-icons.txt"),
+                    $"{DateTime.Now:T} icons={found.Count} {string.Join(" ", found.Take(4))} {error}\n");
             lock (iconLock) icons = found;
             iconBusy = false;
         }) { IsBackground = true };
@@ -98,20 +102,22 @@ internal sealed class Tracker
 
     /// The desktop is a list view (SysListView32 "FolderView") inside
     /// SHELLDLL_DefView, hosted by Progman or by one of the WorkerW windows.
-    private static List<SKRect> DesktopIcons()
+    private static List<SKRect> DesktopIcons(out string info)
     {
+        info = "";
         IntPtr defView = Native.FindWindowEx(Native.FindWindow("Progman", null), IntPtr.Zero, "SHELLDLL_DefView", null);
         IntPtr worker = IntPtr.Zero;
         while (defView == IntPtr.Zero && (worker = Native.FindWindowEx(IntPtr.Zero, worker, "WorkerW", null)) != IntPtr.Zero)
             defView = Native.FindWindowEx(worker, IntPtr.Zero, "SHELLDLL_DefView", null);
         var result = new List<SKRect>();
-        if (defView == IntPtr.Zero) return result;
+        if (defView == IntPtr.Zero) { info = "no DefView"; return result; }
         IntPtr listView = Native.FindWindowEx(defView, IntPtr.Zero, "SysListView32", null);
-        if (listView == IntPtr.Zero) return result;
+        if (listView == IntPtr.Zero) { info = "no list view"; return result; }
 
         var list = AutomationElement.FromHandle(listView);
         var items = list.FindAll(TreeScope.Children,
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
+        info = $"items={items.Count}";
         foreach (AutomationElement item in items)
         {
             if (result.Count >= 300) break;
