@@ -46,6 +46,7 @@ jobs:
         run: |
           mkdir -p build/preview
           build/Barfak-universal --dump-art build/preview
+          mkdir -p ~/Desktop/Photos ~/Desktop/Work && touch ~/Desktop/notes.txt
           open -a TextEdit || true
           sleep 3
           BARFAK_DEMO=1 build/Barfak.app/Contents/MacOS/Barfak > build/preview/log.txt 2>&1 &
@@ -54,6 +55,13 @@ jobs:
           sleep 7
           screencapture -x build/preview/shot2.png || true
           kill %1 || true
+          sleep 1
+          defaults write local.barfak.app iconSnow -bool false
+          defaults write local.barfak.app lightStyle -int 3
+          BARFAK_DEMO=1 build/Barfak.app/Contents/MacOS/Barfak > /dev/null 2>&1 &
+          sleep 6
+          screencapture -x build/preview/shot3.png || true
+          kill %2 || true
 
       - name: Publish preview images
         continue-on-error: true

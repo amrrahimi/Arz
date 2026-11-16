@@ -94,8 +94,9 @@ final class WindowTracker {
         }
         // The Dock floats above windows.
         for r in ax.dock {
-            let f = CGRect(x: r.minX + r.width * 0.1, y: r.minY,
-                           width: r.width * 0.8, height: r.height * 0.92)
+            // A Dock tile is taller and wider than the icon drawn inside it.
+            let f = CGRect(x: r.minX + r.width * 0.12, y: r.minY,
+                           width: r.width * 0.76, height: r.height * 0.78)
             snap.surfaces.append(Surface(key: "d\(Int(r.minX)):\(Int(r.width))", kind: .dock,
                                          frame: f, segments: [f.minX...f.maxX]))
         }
