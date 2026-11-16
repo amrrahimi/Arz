@@ -41,6 +41,26 @@ jobs:
           name: Barfak-macOS
           path: Barfak/build/Barfak.dmg
 
+      - name: Preview artwork and demo screenshots
+        continue-on-error: true
+        run: |
+          mkdir -p build/preview
+          build/Barfak-universal --dump-art build/preview
+          open -a TextEdit || true
+          sleep 3
+          BARFAK_DEMO=1 build/Barfak.app/Contents/MacOS/Barfak > build/preview/log.txt 2>&1 &
+          sleep 9
+          screencapture -x build/preview/shot1.png || true
+          sleep 7
+          screencapture -x build/preview/shot2.png || true
+          kill %1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Barfak-preview
+          path: Barfak/build/preview
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}

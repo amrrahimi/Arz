@@ -1,13 +1,29 @@
 import AppKit
 import CoreGraphics
 
-/// The top edge of an on-screen window where snow can settle.
+struct WindowInfo {
+    let id: CGWindowID
+    /// Global Cocoa coordinates (origin bottom-left, y up).
+    let frame: CGRect
+}
+
+/// A horizontal edge where snow can settle.
 struct Surface {
-    let windowID: CGWindowID
-    /// Window frame in global Cocoa coordinates (origin bottom-left, y up).
+    enum Kind { case window, icon, dock }
+    let key: String
+    let kind: Kind
+    /// Global Cocoa coordinates; snow sits on `frame.maxY`.
     let frame: CGRect
     /// Parts of the top edge (global x ranges) not covered by windows in front.
     let segments: [ClosedRange<CGFloat>]
+}
+
+struct Snapshot {
+    var version = 0
+    /// Front-to-back.
+    var windows: [WindowInfo] = []
+    var surfaces: [Surface] = []
+    var dock: [CGRect] = []
 }
 
 /// Polls the window server for window frames. Only geometry is read, so no
@@ -15,28 +31,30 @@ struct Surface {
 final class WindowTracker {
     static let shared = WindowTracker()
 
-    private var cached: [Surface] = []
+    private var cached = Snapshot()
     private var lastRefresh: TimeInterval = -1
-    private let interval: TimeInterval = 0.35
+    private let interval: TimeInterval = 0.15
     private let ownPID = getpid()
 
-    func surfaces(now: TimeInterval) -> [Surface] {
+    func snapshot(now: TimeInterval) -> Snapshot {
         if now - lastRefresh >= interval || now < lastRefresh {
             lastRefresh = now
+            let version = cached.version + 1
             cached = compute()
+            cached.version = version
+            AXTracker.shared.refreshIfNeeded(now: now)
         }
         return cached
     }
 
-    private func compute() -> [Surface] {
+    private func compute() -> Snapshot {
+        var snap = Snapshot()
         guard let primaryHeight = NSScreen.screens.first?.frame.height,
               let list = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]]
-        else { return [] }
+        else { return snap }
 
-        // Front-to-back list of normal application windows.
-        var windows: [(id: CGWindowID, frame: CGRect)] = []
         for info in list {
             guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
                   let pid = info[kCGWindowOwnerPID as String] as? Int32, pid != ownPID,
@@ -46,28 +64,55 @@ final class WindowTracker {
             else { continue }
             if let alpha = info[kCGWindowAlpha as String] as? Double, alpha < 0.05 { continue }
             if b.width < 80 || b.height < 40 { continue }
-            // CG uses top-left origin; flip into Cocoa coordinates.
+            // CG uses a top-left origin; flip into Cocoa coordinates.
             let frame = CGRect(x: b.minX, y: primaryHeight - b.maxY,
                                width: b.width, height: b.height)
-            windows.append((CGWindowID(number), frame))
+            snap.windows.append(WindowInfo(id: CGWindowID(number), frame: frame))
         }
 
-        var result: [Surface] = []
-        for (i, w) in windows.enumerated() {
-            let top = w.frame.maxY
-            var segs: [ClosedRange<CGFloat>] = [w.frame.minX...w.frame.maxX]
-            for j in 0..<i {
-                let o = windows[j].frame
-                guard o.minY <= top, o.maxY > top else { continue }
-                segs = subtract(segs, o.minX, o.maxX)
-                if segs.isEmpty { break }
-            }
-            segs = segs.filter { $0.upperBound - $0.lowerBound >= 12 }
+        for (i, w) in snap.windows.enumerated() {
+            let segs = visibleSegments(of: w.frame, occluders: snap.windows[0..<i])
             if !segs.isEmpty {
-                result.append(Surface(windowID: w.id, frame: w.frame, segments: segs))
+                snap.surfaces.append(Surface(key: "w\(w.id)", kind: .window,
+                                             frame: w.frame, segments: segs))
             }
         }
-        return result
+
+        guard Settings.shared.iconSnow else { return snap }
+        let ax = AXTracker.shared.items()
+
+        // Desktop icons sit behind every window.
+        for r in ax.icons {
+            let side = min(r.width, r.height)
+            let f = CGRect(x: r.midX - side * 0.4, y: r.minY,
+                           width: side * 0.8, height: r.height - side * 0.06)
+            let segs = visibleSegments(of: f, occluders: snap.windows[...])
+            if !segs.isEmpty {
+                snap.surfaces.append(Surface(key: "i\(Int(r.minX)):\(Int(r.maxY))", kind: .icon,
+                                             frame: f, segments: segs))
+            }
+        }
+        // The Dock floats above windows.
+        for r in ax.dock {
+            let f = CGRect(x: r.minX + r.width * 0.1, y: r.minY,
+                           width: r.width * 0.8, height: r.height * 0.92)
+            snap.surfaces.append(Surface(key: "d\(Int(r.minX)):\(Int(r.width))", kind: .dock,
+                                         frame: f, segments: [f.minX...f.maxX]))
+        }
+        snap.dock = ax.dock
+        return snap
+    }
+
+    private func visibleSegments(of frame: CGRect,
+                                 occluders: ArraySlice<WindowInfo>) -> [ClosedRange<CGFloat>] {
+        let top = frame.maxY
+        var segs: [ClosedRange<CGFloat>] = [frame.minX...frame.maxX]
+        for o in occluders {
+            guard o.frame.minY <= top, o.frame.maxY > top else { continue }
+            segs = subtract(segs, o.frame.minX, o.frame.maxX)
+            if segs.isEmpty { break }
+        }
+        return segs.filter { $0.upperBound - $0.lowerBound >= 12 }
     }
 
     private func subtract(_ segs: [ClosedRange<CGFloat>],
