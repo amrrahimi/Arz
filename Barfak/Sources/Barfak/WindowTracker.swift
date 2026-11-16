@@ -85,7 +85,7 @@ final class WindowTracker {
         for r in ax.icons {
             let side = min(r.width, r.height)
             let f = CGRect(x: r.midX - side * 0.4, y: r.minY,
-                           width: side * 0.8, height: r.height - side * 0.06)
+                           width: side * 0.8, height: r.height - side * 0.11)
             let segs = visibleSegments(of: f, occluders: snap.windows[...])
             if !segs.isEmpty {
                 snap.surfaces.append(Surface(key: "i\(Int(r.minX)):\(Int(r.maxY))", kind: .icon,

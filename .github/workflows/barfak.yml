@@ -46,6 +46,7 @@ jobs:
         run: |
           mkdir -p build/preview
           build/Barfak-universal --dump-art build/preview
+          swiftc -O Scripts/ci-mouse.swift -o build/ci-mouse
           mkdir -p ~/Desktop/Photos ~/Desktop/Work && touch ~/Desktop/notes.txt
           open -a TextEdit || true
           sleep 3
@@ -59,8 +60,14 @@ jobs:
           defaults write local.barfak.app iconSnow -bool false
           defaults write local.barfak.app lightStyle -int 3
           BARFAK_DEMO=1 build/Barfak.app/Contents/MacOS/Barfak > /dev/null 2>&1 &
-          sleep 6
+          sleep 5
+          build/ci-mouse 60 763 330 763
+          build/ci-mouse 512 54 957 185
+          sleep 1
           screencapture -x build/preview/shot3.png || true
+          build/ci-mouse 330 745 200 500
+          sleep 1
+          screencapture -x build/preview/shot4.png || true
           kill %2 || true
 
       - name: Publish preview images
