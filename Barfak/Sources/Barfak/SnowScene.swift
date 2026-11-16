@@ -503,7 +503,7 @@ final class SnowScene: SKScene {
                         g.dirty = true
                     }
                 }
-                let area = CGFloat.pi * b.r * b.r + gathered * 2.2
+                let area = CGFloat.pi * b.r * b.r + gathered * 1.3
                 b.r = min(38, sqrt(area / .pi))
                 b.node.zRotation -= dx / max(6, b.r)
                 drag = .rolling(b, lastX: p.x)
