@@ -14,6 +14,7 @@ internal sealed class Tracker
     private Snapshot cached = new();
     private double lastRefresh = -1;
     private int version;
+    private bool windowsLogged;
 
     private readonly object iconLock = new();
     private List<SKRect> icons = new();
@@ -74,8 +75,12 @@ internal sealed class Tracker
                 Native.GetWindowRect(h, out r);
             if (r.Right - r.Left < 80 || r.Bottom - r.Top < 40) return true;
             list.Add(new WindowInfo(h.ToInt64(), new SKRect(r.Left, r.Top, r.Right, r.Bottom)));
+            if (BarfakSettings.Demo && !windowsLogged)
+                File.AppendAllText(Path.Combine(Path.GetTempPath(), "barfak-icons.txt"),
+                    $"window {sb} ex={ex:X} {r.Left},{r.Top},{r.Right},{r.Bottom} pid={pid}\n");
             return true;
         }, IntPtr.Zero);
+        windowsLogged = true;
         return list;
     }
 

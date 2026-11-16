@@ -70,7 +70,7 @@ jobs:
           [CiHelper]::Shot("$PWD/out/preview/win-shot2.png")
           Get-Process Barfak -ErrorAction SilentlyContinue | Select-Object Name, CPU, WorkingSet64 | Format-Table | Out-String | Add-Content out/preview/win-log.txt
           Stop-Process -Id $p.Id -Force
-          Get-Content "$env:TEMP\barfak-icons.txt" -ErrorAction SilentlyContinue | Select-Object -First 6 | Add-Content out/preview/win-log.txt
+          Get-Content "$env:TEMP\barfak-icons.txt" -ErrorAction SilentlyContinue | Select-Object -First 20 | Add-Content out/preview/win-log.txt
 
       - name: Publish release files
         env:
